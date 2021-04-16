@@ -14,18 +14,14 @@ logging.basicConfig(level=logging.INFO)
 logger.info("Starting RaidSplitBot")
 
 TOKEN = os.getenv("API_TOKEN")
-if TOKEN == None:
+if TOKEN is None:
     sys.exit("Environment variable API_TOKEN must be supplied")
 
 bot = commands.Bot(command_prefix="!")
 
 
-# Should be replaced with storage backend
+# TODO: Should be replaced with storage backend
 RAIDS = {}
-
-
-# Raider and Raid
-ACTIVE_SPLITTING = {}
 
 
 @dataclass
@@ -37,7 +33,7 @@ class SplitMember:
 @dataclass
 class SplitGroup:
     members: Dict[int, SplitMember]
-    # It is a Dict of member
+    # It is a Dict of
     # id member to dictionary id member with proposed split
     proposed_splits: Dict[int, Dict[int, SplitMember]]
 
@@ -108,15 +104,11 @@ def verify_allocation(proposed_splits):
     return True
 
 
-# In channel !RaidSplit
-# Message mentioned raid
-# - Ping people exponentially if they don't respond
-# Raid gives response for each raider
-# Alow for edits at the end
 @bot.command(help="Send anonymous suggestion")
 async def split(ctx, raid_name, raiders: commands.Greedy[discord.Member]):
-    # Use converters
-    # Get from channel then dm
+    """
+    Command a PM will call when they want to run a split scenario
+    """
     group = SplitGroup(members={}, proposed_splits={})
     if RAIDS.get(raid_name):
         await ctx.send("Raid Already exists please use a different name!")
@@ -126,16 +118,20 @@ async def split(ctx, raid_name, raiders: commands.Greedy[discord.Member]):
     for raider in raiders:
         group.add_member(raider)
         await raider.send(
-            f"Hi your input has been requested for raid: {raid_name} \n please "
-            "use the !allocate <raid_name> <member_handle> <allocation> \n the "
+            f"Hi your input has been requested for raid: {raid_name} \n Please "
+            "use the `!allocate <raid_name> <member_handle> <allocation>`. Your "
             "allocations should be a number from 0 to 100 \n\n"
-            "If you make a mistake use the !edit command to modify your allocation"
+            "If you make a mistake use the `!edit` command to modify your allocation"
         )
 
 
-# Add defensive programming
 @bot.command()
 async def allocate(ctx, raid_name, member: discord.User, allocation: int):
+    """
+    This command is meant to be used in a DM and where a raider will specify
+    what they think a fair allocation is for a specific user
+
+    """
     raid = RAIDS.get(raid_name)
     proposed_allocs = raid.proposed_splits.get(ctx.author.id)
     if proposed_allocs is None:
@@ -143,7 +139,7 @@ async def allocate(ctx, raid_name, member: discord.User, allocation: int):
         return
     old_allocation = proposed_allocs.get(member.id, None)
     if old_allocation is None:
-        await ctx.send("You are not in the raid party")
+        await ctx.send("That user is not in the raid party")
         return
 
     raid.proposed_splits[ctx.author.id][member.id] = SplitMember(
@@ -163,17 +159,22 @@ async def allocate(ctx, raid_name, member: discord.User, allocation: int):
     await ctx.send(f"Your curent entries are \n ```{table}```")
 
 
-# A summary of allocations
 @bot.command()
 async def summary(ctx, raid_name):
+    """
+    This command will show the allocations specified for all raiders
+    in a specific raid
+    """
     raid = RAIDS.get(raid_name)
     table = build_summary_table(raid)
     await ctx.send(f"The current entries are \n ```{table}```")
 
 
-# A summary of allocations
 @bot.command()
 async def edit(ctx, raid_name, member: discord.User, split: int):
+    """
+    This command allows a raider to modify their proposed allocation
+    """
     raid = RAIDS.get(raid_name)
     author_proposals = raid.proposed_splits.get(ctx.author.id, None)
     if not author_proposals:
@@ -184,7 +185,6 @@ async def edit(ctx, raid_name, member: discord.User, split: int):
         await ctx.send("The referred to member is not part of the raid party")
         return
 
-    # Need to add a threshold guide so people don't overallocate
     raid.proposed_splits[ctx.author.id][member.id] = SplitMember(
         info=member, split_percent=split
     )
@@ -202,5 +202,4 @@ async def edit(ctx, raid_name, member: discord.User, split: int):
     await ctx.send(f"Your curent entries are \n ```{table}```")
 
 
-# Need to generate token
 bot.run(TOKEN)
