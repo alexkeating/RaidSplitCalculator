@@ -109,7 +109,7 @@ async def split(ctx, raid_name, raiders: commands.Greedy[discord.Member]):
     """
     Command a PM will call when they want to run a split scenario
     """
-    raid_name = raid_name.trim()
+    raid_name = raid_name.strip()
     group = SplitGroup(members={}, proposed_splits={})
     if RAIDS.get(raid_name):
         await ctx.send("Raid Already exists please use a different name!")
@@ -119,7 +119,7 @@ async def split(ctx, raid_name, raiders: commands.Greedy[discord.Member]):
     for raider in raiders:
         group.add_member(raider)
         await raider.send(
-            f"Hi your input has been requested for raid: {raid_name} \n Please "
+            f"Hi your input has been requested for the {raid_name} raid\nPlease "
             "use the `!allocate <raid_name> <member_handle> <allocation>`. Your "
             "allocations should be a number from 0 to 100 \n\n"
             "If you make a mistake use the `!edit` command to modify your allocation"
@@ -133,7 +133,7 @@ async def allocate(ctx, raid_name, member: discord.User, allocation: int):
     what they think a fair allocation is for a specific user
 
     """
-    raid_name = raid_name.trim()
+    raid_name = raid_name.strip()
     raid = RAIDS.get(raid_name)
     proposed_allocs = raid.proposed_splits.get(ctx.author.id)
     if proposed_allocs is None:
@@ -167,7 +167,7 @@ async def summary(ctx, raid_name):
     This command will show the allocations specified for all raiders
     in a specific raid
     """
-    raid_name = raid_name.trim()
+    raid_name = raid_name.strip()
     raid = RAIDS.get(raid_name)
     table = build_summary_table(raid)
     await ctx.send(f"The current entries are \n ```{table}```")
@@ -178,7 +178,7 @@ async def edit(ctx, raid_name, member: discord.User, split: int):
     """
     This command allows a raider to modify their proposed allocation
     """
-    raid_name = raid_name.trim()
+    raid_name = raid_name.strip()
     raid = RAIDS.get(raid_name)
     author_proposals = raid.proposed_splits.get(ctx.author.id, None)
     if not author_proposals:
