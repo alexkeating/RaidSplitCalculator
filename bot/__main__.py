@@ -109,6 +109,7 @@ async def split(ctx, raid_name, raiders: commands.Greedy[discord.Member]):
     """
     Command a PM will call when they want to run a split scenario
     """
+    raid_name = raid_name.trim()
     group = SplitGroup(members={}, proposed_splits={})
     if RAIDS.get(raid_name):
         await ctx.send("Raid Already exists please use a different name!")
@@ -132,6 +133,7 @@ async def allocate(ctx, raid_name, member: discord.User, allocation: int):
     what they think a fair allocation is for a specific user
 
     """
+    raid_name = raid_name.trim()
     raid = RAIDS.get(raid_name)
     proposed_allocs = raid.proposed_splits.get(ctx.author.id)
     if proposed_allocs is None:
@@ -165,6 +167,7 @@ async def summary(ctx, raid_name):
     This command will show the allocations specified for all raiders
     in a specific raid
     """
+    raid_name = raid_name.trim()
     raid = RAIDS.get(raid_name)
     table = build_summary_table(raid)
     await ctx.send(f"The current entries are \n ```{table}```")
@@ -175,6 +178,7 @@ async def edit(ctx, raid_name, member: discord.User, split: int):
     """
     This command allows a raider to modify their proposed allocation
     """
+    raid_name = raid_name.trim()
     raid = RAIDS.get(raid_name)
     author_proposals = raid.proposed_splits.get(ctx.author.id, None)
     if not author_proposals:
