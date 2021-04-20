@@ -133,9 +133,9 @@ async def split(ctx, raid_name, raiders: commands.Greedy[discord.Member]):
         group.add_member(raider)
         await raider.send(
             f"Hi your input has been requested for the {raid_name} raid\nPlease "
-            "use the `!allocate <raid_name> <member_handle> <allocation>`. Your "
+            "use the `!splitCalculator allocate <raid_name> <member_handle> <allocation>`. Your "
             "allocations should be a number from 0 to 100 \n\n"
-            "If you make a mistake use the `!edit` command to modify your allocation"
+            "If you make a mistake use the `!splitCalculator edit` command to modify your allocation"
         )
 
 
