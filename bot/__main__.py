@@ -104,7 +104,13 @@ def verify_allocation(proposed_splits):
     return True
 
 
-@bot.command(help="Send anonymous suggestion")
+@bot.group()
+async def splitCalculator(ctx):
+    if ctx.invoked_subcommand is None:
+        await ctx.send(f"Subcommand {ctx.subcommand_passed} is not a valid subcommand!")
+
+
+@splitCalculator.command(help="Send anonymous suggestion")
 async def split(ctx, raid_name, raiders: commands.Greedy[discord.Member]):
     """
     Command a PM will call when they want to run a split scenario
@@ -126,7 +132,7 @@ async def split(ctx, raid_name, raiders: commands.Greedy[discord.Member]):
         )
 
 
-@bot.command()
+@splitCalculator.command()
 async def allocate(ctx, raid_name, member: discord.User, allocation: int):
     """
     This command is meant to be used in a DM and where a raider will specify
@@ -161,7 +167,7 @@ async def allocate(ctx, raid_name, member: discord.User, allocation: int):
     await ctx.send(f"Your curent entries are \n ```{table}```")
 
 
-@bot.command()
+@splitCalculator.command()
 async def summary(ctx, raid_name):
     """
     This command will show the allocations specified for all raiders
@@ -173,7 +179,7 @@ async def summary(ctx, raid_name):
     await ctx.send(f"The current entries are \n ```{table}```")
 
 
-@bot.command()
+@splitCalculator.command()
 async def edit(ctx, raid_name, member: discord.User, split: int):
     """
     This command allows a raider to modify their proposed allocation

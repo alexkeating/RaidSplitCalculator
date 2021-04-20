@@ -15,7 +15,6 @@ build:
 
 run:
 	docker run -e API_TOKEN=$(API_TOKEN) \
-			   -e SUGGESTION_CHANNEL=$(SUGGESTION_CHANNEL) \
 			   -e CLIENT_ID=$(CLIENT_ID) \
 			   -e GUILD_ID=$(GUILD_ID) \
 			   $(PROJECT_NAME):$(TAG) $(cmd)
