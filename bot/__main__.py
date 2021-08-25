@@ -1,14 +1,14 @@
-import logging
 import os
+import logging
 import sys
-import jsonpickle
 from discord.ext import commands
-from shutil import copyfile
 from texttable import Texttable
-from typing import Dict, List, Tuple, Optional
+from typing import List
 from statistics import mean, geometric_mean
 
-from raid import *
+from discord import Member
+from database import init_db, close_db
+from raid import Raid, UserId, MemberInfo
 
 TOKEN = os.getenv("API_TOKEN")
 if TOKEN is None:
@@ -16,39 +16,8 @@ if TOKEN is None:
 
 bot = commands.Bot(command_prefix="!")
 
-RAIDS: RaidDict = {}
-
 DB_PATH = os.getenv("DB_PATH")
 DB_BACKUP_PATH = DB_PATH + '.bckp'
-
-
-def init_db(db_path: str, db_backup_path: str) -> RaidDict:
-    if os.path.isfile(db_backup_path):
-        raise IOError("Backup file exists already. Last time, Something went wrong ")
-
-    try:
-        # backup the db and open
-        copyfile(db_path, db_backup_path)
-        file = open(db_path)
-    except IOError:
-        # If db not exists, create the file and populate with an empty dict
-        file = open(db_path, 'w+')
-        file.write(" {}")
-        file.close()
-
-        # backup the db and open
-        copyfile(db_path, db_backup_path)
-        file = open(db_path)
-
-    raids: RaidDict = jsonpickle.decode(file.read())
-    return raids
-
-
-def close_db(raids: RaidDict, db_path: str, db_backup_path: str):
-    file = open(db_path, 'w')
-    file.write(jsonpickle.encode(raids))
-
-    os.remove(db_backup_path)
 
 
 @bot.group()
@@ -65,7 +34,7 @@ async def help(ctx):
 
 
 @splitter.command(help="Send out a message to split a raid and become the admin")
-async def split(ctx, raid_name, raiders: commands.Greedy[discord.Member]):
+async def split(ctx, raid_name, raiders: commands.Greedy[Member]):
     """
     Command a PM will call when they want to run a split scenario.
     The sender becomes the admin of the proposal.
