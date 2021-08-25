@@ -140,18 +140,25 @@ async def split(ctx, raid_name, raiders: commands.Greedy[discord.Member]):
             "If you make a mistake use the `!splitter allocate` again to modify your allocation."
         )
 
+async def sender_is_admin(ctx, raid: Raid) -> bool:
+    sender: UserId = UserId(ctx.author.id)
+
+    if sender != raid.admin:
+        await ctx.send(f"You are **not the admin**.")
+        return False
+    else:
+        return True
 
 @splitter.command(help="Close the split (admin only)")
 async def close(ctx, raid_name):
-    sender: UserId = UserId(ctx.author.id)
+
     raid = find_raid(raid_name)
 
-    if sender != raid.admin:
-        await ctx.send(f"You are **not** the admin.")
-    else:
+    if await sender_is_admin(ctx, raid):
         raid.is_open = False
         # TODO send to all member
         await ctx.send(f"The split for raid **{raid_name}** has been closed.")
+
 
 
 def find_raid(raid_name: str) -> Raid:
@@ -235,11 +242,9 @@ async def summary(ctx, raid_name):
     raid_name = raid_name.strip()
     raid = RAIDS.get(raid_name)
 
-    if sender is not raid.admin:
-        await ctx.send(f"You are **not** the admin.")
-
-    table = build_summary_table(raid)
-    await ctx.send(f"The current entries are \n ```{table}```")
+    if await sender_is_admin(ctx, raid):
+        table = build_summary_table(raid)
+        await ctx.send(f"The current entries are \n ```{table}```")
 
 
 def build_member_table(member: UserId, raid: Raid):
