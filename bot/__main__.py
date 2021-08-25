@@ -7,9 +7,7 @@ from discord.ext import commands
 from dataclasses import dataclass
 from shutil import copyfile
 from texttable import Texttable
-from statistics import mean, geometric_mean
 from typing import Dict, Tuple, Optional
-
 
 UserId = int
 SplitMember = Tuple[int, str]
@@ -65,15 +63,11 @@ class SplitGroup:
 
 RaidDict = Dict[str, SplitGroup]
 
-
-
-
 TOKEN = os.getenv("API_TOKEN")
 if TOKEN is None:
     sys.exit("Environment variable API_TOKEN must be supplied")
 
 bot = commands.Bot(command_prefix="!")
-
 
 RAIDS: RaidDict = {}
 
@@ -86,26 +80,28 @@ def init_db(db_path: str, db_backup_path: str) -> RaidDict:
         raise IOError("Backup file exists already. Last time, Something went wrong ")
 
     try:
+        # backup the db and open
         copyfile(db_path, db_backup_path)
         file = open(db_path)
     except IOError:
-        # If not exists, create the file and populate with an empty dict
-        file = open(db_path,'w+')
+        # If db not exists, create the file and populate with an empty dict
+        file = open(db_path, 'w+')
         file.write(" {}")
         file.close()
 
+        # backup the db and open
         copyfile(db_path, db_backup_path)
         file = open(db_path)
 
-
     raids: RaidDict = jsonpickle.decode(file.read())
 
-    print("Raids opened:\n", raids)
+    print("Raids DB:\n", raids)
 
     return raids
 
+
 def close_db(raids: RaidDict, db_path: str, db_backup_path: str):
-    print("Raids closed:\n", raids)
+    print("Raids DB:\n", raids)
 
     file = open(db_path, 'w')
     file.write(jsonpickle.encode(raids))
@@ -184,7 +180,7 @@ async def allocate(ctx, raid_name, member: discord.User, split: int):
 
     raid_sg = find_raid_split_group(raid_name)
     if raid_sg is None:
-        await ctx.send(f"Raid **{0}** not found.".format(raid_name))
+        await ctx.send(f"Raid **{raid_name}** not found.")
         return
 
     sender: UserId = ctx.author.id
@@ -195,7 +191,7 @@ async def allocate(ctx, raid_name, member: discord.User, split: int):
 
     # check if sender is part of the raid
     if not part_of_raid_party(raid_name, sender):
-        await ctx.send("You are not in the raid party")
+        await ctx.send("You are not in the raid party of raid **{raid_name}**")
         return
 
     sender_proposals = raid.proposals.get(sender, None)
@@ -229,7 +225,7 @@ async def edit(ctx, raid_name, member: discord.User, split: int):
 
     raid_sg = find_raid_split_group(raid_name)
     if raid_sg is None:
-        await ctx.send(f"Raid **{0}** not found.".format(raid_name))
+        await ctx.send(f"Raid **{raid_name}** not found.")
         return
 
     sender: UserId = ctx.author.id
@@ -311,7 +307,7 @@ def build_summary_table(group: SplitGroup):
     return table.draw()
 
 
-RAIDS: RaidDict = init_db(DB_PATH, DB_BACKUP_PATH)
+RAIDS = init_db(DB_PATH, DB_BACKUP_PATH)
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
