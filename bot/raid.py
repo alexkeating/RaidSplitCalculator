@@ -1,11 +1,10 @@
 import discord
 from dataclasses import dataclass
-from typing import Dict, Tuple, Optional, List
+from typing import Dict, Optional, List
 from texttable import Texttable
 from statistics import mean, geometric_mean
 
 UserId = str
-SplitMember = Tuple[int, str]
 SplitProposal = Dict[UserId, Optional[float]]
 
 
@@ -20,7 +19,7 @@ class MemberInfo:
 @dataclass
 class Raid:
     """
-    Command a
+    A class that holds the split proposals of a raid.
     """
     admin: UserId
     proposals: Dict[UserId, SplitProposal]
@@ -70,43 +69,42 @@ class Raid:
             member_ids.append(self.member_infos[member].id)
         return member_ids
 
-    def calculate_share(self, user_id: UserId) -> bool:
+    def calculate_share(self, member: UserId) -> bool:
         # iterate over all members
         proposed_shares: List[float] = []
 
         for _, proposal in self.proposals.items():
-            proposed_shares.append(proposal.get(user_id, None))
+            proposed_shares.append(proposal.get(member, None))
 
         allocations_incomplete = any(x is None for x in proposed_shares)
         if allocations_incomplete:
             return False
 
-        current_member_info: MemberInfo = self.member_infos.get(user_id)
-        current_member_info.mean_share = mean(proposed_shares)
-        current_member_info.geom_mean_share = geometric_mean(proposed_shares)
+        member_info: MemberInfo = self.member_infos.get(member)
+        member_info.mean_share = mean(proposed_shares)
+        member_info.geom_mean_share = geometric_mean(proposed_shares)
 
         return not allocations_incomplete
 
     def update_shares(self):
         # iterate over all members
-        for current_member, _ in self.proposals.items():
-            self.calculate_share(current_member)
+        for proposer, _ in self.proposals.items():
+            self.calculate_share(proposer)
 
-    def build_member_table(self, member: UserId):
+    def build_member_table(self, proposer: UserId):
         rows = []
-        for member, percentage in self.proposals.get(member).items():
-            rows.append([self.member_infos[member].name, percentage])
+        for proposer, percentage in self.proposals.get(proposer).items():
+            rows.append([self.member_infos[proposer].name, percentage])
 
         return self.build_table(["Teammate", "Proposed Split"], rows)
 
     def build_summary_table(self):
         rows = []
-        for outer_member, inner_dict in self.proposals.items():
+        for proposer, inner_dict in self.proposals.items():
             is_first = True
-            for inner_member, percentage in inner_dict.items():
-                
-                rows.append([self.member_infos[outer_member].name if is_first else "",
-                             self.member_infos[inner_member].name,
+            for teammate, percentage in inner_dict.items():
+                rows.append([self.member_infos[proposer].name if is_first else "",
+                             self.member_infos[teammate].name,
                              percentage])
                 is_first = False
 
