@@ -130,6 +130,8 @@ async def split(ctx, raid_name, raiders: commands.Greedy[discord.Member]):
     raid = Raid(admin=UserId(ctx.author.id), proposals={}, member_infos={}, is_open=True)
     RAIDS[raid_name] = raid
 
+    await ctx.send(f"A raid wit the name **{raid_name}** and **{len(raiders)}** members was created.")
+
     for raider in raiders:
         new_member: UserId = UserId(raider.id)
         raid.add_member(raider)
