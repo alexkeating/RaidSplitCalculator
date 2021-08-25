@@ -92,15 +92,10 @@ def init_db(db_path: str, db_backup_path: str) -> RaidDict:
         file = open(db_path)
 
     raids: RaidDict = jsonpickle.decode(file.read())
-
-    print("Raids DB:\n", raids)
-
     return raids
 
 
 def close_db(raids: RaidDict, db_path: str, db_backup_path: str):
-    print("Raids DB:\n", raids)
-
     file = open(db_path, 'w')
     file.write(jsonpickle.encode(raids))
 
@@ -137,7 +132,6 @@ async def split(ctx, raid_name, raiders: commands.Greedy[discord.Member]):
 
     for raider in raiders:
         new_member: UserId = UserId(raider.id)
-        print(new_member)
         raid.add_member(raider)
         await raider.send(
             f"Hi {raid.member_infos[new_member].name}. Your input has been requested for the **{raid_name}** raid.\n"
@@ -223,7 +217,6 @@ async def allocate(ctx, raid_name, percentages: commands.Greedy[float]):
 
     # iterate over all beneficiaries in member info
     for i, beneficiary in enumerate(members_ids):
-        print(i, beneficiary, percentages)
         raid.proposals[sender][beneficiary] = percentages[i]
 
     await update_shares(ctx, raid)
