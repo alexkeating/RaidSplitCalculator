@@ -31,8 +31,8 @@ class SplitGroup:
     member_infos: Dict[UserId, MemberInfo]
 
     def add_member(self, raider: discord.User):
-        new_member = str(raider.id)
-        self.member_infos[new_member] = MemberInfo(id=str(raider.id),
+        new_member = UserId(raider.id)
+        self.member_infos[new_member] = MemberInfo(id=UserId(raider.id),
                                                    name=raider.name,
                                                    mean_share=None,
                                                    geom_mean_share=None)
@@ -140,7 +140,7 @@ async def split(ctx, raid_name, raiders: commands.Greedy[discord.Member]):
 
     RAIDS[raid_name] = group
     for raider in raiders:
-        new_member: UserId = str(raider.id)
+        new_member: UserId = UserId(raider.id)
         print(new_member)
         group.add_member(raider)
         await raider.send(
@@ -155,8 +155,9 @@ def find_raid_split_group(raid_name: str) -> SplitGroup:
     raid_name = raid_name.strip()
     return RAIDS.get(raid_name)
 
+
 def part_of_raid_party(raid_name: str, split_member: UserId) -> bool:
-    res = find_raid_split_group(raid_name).proposals.get(str(split_member))
+    res = find_raid_split_group(raid_name).proposals.get(UserId(split_member))
     return res is not None
 
 
@@ -175,8 +176,8 @@ async def allocate(ctx, raid_name, member: discord.User, split: float):
         await ctx.send(f"Raid **{raid_name}** not found.")
         return
 
-    sender: UserId = str(ctx.author.id)
-    beneficiary: UserId = str(member.id)
+    sender: UserId = UserId(ctx.author.id)
+    beneficiary: UserId = UserId(member.id)
 
     # check if sender is part of the raid
     if not part_of_raid_party(raid_name, sender):
@@ -219,8 +220,8 @@ async def edit(ctx, raid_name, member: discord.User, split: float):
         await ctx.send(f"Raid **{raid_name}** not found.")
         return
 
-    sender: UserId = str(ctx.author.id)
-    beneficiary: UserId = str(member.id)
+    sender: UserId = UserId(ctx.author.id)
+    beneficiary: UserId = UserId(member.id)
 
     if not part_of_raid_party(raid_name, sender):
         await ctx.send("You are not a part of this raid")
