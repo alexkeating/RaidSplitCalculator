@@ -6,7 +6,7 @@ authors = ["Your Name <you@example.com>"]
 license = "MIT"
 
 [tool.poetry.dependencies]
-python = "^3.8"
+python = "^3.9"
 "discord.py" = "^1.7.1"
 texttable = "^1.6.3"
 jsonpickle = "^2.0.0"

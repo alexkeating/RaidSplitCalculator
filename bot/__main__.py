@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from shutil import copyfile
 from texttable import Texttable
 from typing import Dict, Tuple, Optional
+from statistics import mean, geometric_mean
 
 UserId = str
 SplitMember = Tuple[int, str]
@@ -23,7 +24,7 @@ class MemberInfo:
 
 @dataclass
 class SplitGroup:
-    SplitProposal = Dict[UserId, float]
+    SplitProposal = Dict[UserId, Optional[float]]
 
     # It is a Dict of
     # id member to dictionary id member with proposed split
@@ -40,7 +41,7 @@ class SplitGroup:
         # Add new_member to all existing split proposals
         for _, proposal in self.proposals.items():
             if not proposal.get(new_member):
-                proposal[new_member] = 0.0
+                proposal[new_member] = None
 
         # Create a new split proposal for new_member and add all existing members
         if not self.proposals.get(new_member, None):
@@ -50,10 +51,10 @@ class SplitGroup:
             # add others
             existing_members = self.proposals.keys()
             for existing_member in existing_members:
-                new_members_proposal[existing_member] = 0.0
+                new_members_proposal[existing_member] = None
 
             # add self
-            new_members_proposal[new_member] = 0.0
+            new_members_proposal[new_member] = None
 
 
 RaidDict = Dict[str, SplitGroup]
@@ -245,6 +246,8 @@ async def edit(ctx, raid_name, member: discord.User, split: float):
 
     await ctx.send(f"Your current entries are \n ```{table}```")
 
+    await update_shares(ctx, raid_sg)
+
 
 @splitter.command(help="Get a summary of the proposed allocations for a raid")
 async def summary(ctx, raid_name):
@@ -275,6 +278,60 @@ def build_member_table(member: UserId, group: SplitGroup):
         ]
     )
     return table.draw()
+
+
+@splitter.command(help="Get your averaged shares.")
+async def get_share(ctx, raid_name):
+    raid = find_raid_split_group(raid_name)
+    sender = UserId(ctx.author.id)
+
+    await calculate_share(ctx, raid, sender)
+
+    sender_info: MemberInfo = raid.member_infos.get(sender)
+
+    message = "Your arithmetic mean share is "
+    if sender_info.mean_share is not None:
+        message += f"**{sender_info.mean_share:.1f} %** and "
+    else:
+        message += f"**not available** and "
+
+    message += "your geometric mean share is "
+    if sender_info.geom_mean_share is not None:
+        message += f"**{sender_info.geom_mean_share:.1f} %** and "
+    else:
+        message += f"**not available**."
+
+    await ctx.send(message)
+
+
+async def calculate_share(ctx, raid: SplitGroup, user_id: UserId):
+    # iterate over all members
+    proposed_shares: List[float] = []
+
+    for _, proposal in raid.proposals.items():
+        proposed_shares.append(proposal.get(user_id, None))
+
+    if any(x is None for x in proposed_shares):
+        await ctx.send(f"Some allocations are missing.")
+        return
+
+    current_member_info: MemberInfo = raid.member_infos.get(user_id)
+
+    if any(x is None for x in proposed_shares):
+        await ctx.send(f"Some allocations are missing so the arithmetic mean cannot be calculated.")
+    else:
+        current_member_info.mean_share = mean(proposed_shares)
+
+    if any(x == 0 for x in proposed_shares):
+        await ctx.send(f"Some allocations are 0 so that the geometric mean cannot be applied.")
+    else:
+        current_member_info.geom_mean_share = geometric_mean(proposed_shares)
+
+
+async def update_shares(ctx, raid: SplitGroup):
+    # iterate over all members
+    for current_member, _ in raid.proposals.items():
+        calculate_share(ctx, raid, current_member)
 
 
 def build_summary_table(group: SplitGroup):
