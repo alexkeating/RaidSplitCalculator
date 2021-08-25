@@ -70,16 +70,6 @@ class Raid:
             member_ids.append(self.member_infos[member].id)
         return member_ids
 
-    def build_member_table(self, member: UserId):
-        splits = self.proposals.get(member)
-        rows = []
-        for member, percentage in splits.items():
-            rows.append([self.member_infos[member].name, percentage])
-
-        table = Texttable()
-        table.add_rows([["Teammate", "Proposed Split"], *rows])
-        return table.draw()
-
     def calculate_share(self, user_id: UserId) -> bool:
         # iterate over all members
         proposed_shares: List[float] = []
@@ -102,16 +92,29 @@ class Raid:
         for current_member, _ in self.proposals.items():
             self.calculate_share(current_member)
 
+    def build_member_table(self, member: UserId):
+        rows = []
+        for member, percentage in self.proposals.get(member).items():
+            rows.append([self.member_infos[member].name, percentage])
+
+        return self.build_table(["Teammate", "Proposed Split"], rows)
+
     def build_summary_table(self):
         rows = []
         for outer_member, inner_dict in self.proposals.items():
+            is_first = True
             for inner_member, percentage in inner_dict.items():
-                rows.append([self.member_infos[outer_member].name,
+                
+                rows.append([self.member_infos[outer_member].name if is_first else "",
                              self.member_infos[inner_member].name,
                              percentage])
+                is_first = False
 
+        return self.build_table(["Proposer", "Teammate", "Proposed Split"], rows)
+
+    def build_table(self, header, rows):
         table = Texttable()
-        table.add_rows([["Proposer", "Teammate", "Proposed Split"], *rows])
+        table.add_rows([header, *rows])
         return table.draw()
 
 
