@@ -1,5 +1,4 @@
 from raid import Raid, UserId, MemberInfo
-from database import find_raid
 from typing import List
 from statistics import mean, geometric_mean
 from texttable import Texttable
@@ -14,12 +13,7 @@ async def sender_is_admin(ctx, raid: Raid) -> bool:
     else:
         return True
 
-
-def part_of_raid(raid_name: str, split_member: UserId) -> bool:
-    res = find_raid(raid_name).proposals.get(UserId(split_member))
-    return res is not None
-
-
+# TODO TODO put into Raid
 def get_member_names(raid: Raid):
     member_names: List[str] = []
     for member, percentage in raid.member_infos.items():

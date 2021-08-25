@@ -4,37 +4,43 @@ from shutil import copyfile
 
 from raid import *
 
-RAIDS = {}
 
-def find_raid(raid_name: str) -> Raid:
-    raid_name = raid_name.strip()
-    return RAIDS.get(raid_name)
+class RaidDB:
+    raid_db: RaidDict = {}
+    db_path = os.getenv("DB_PATH")
+    db_backup_path = db_path + '.bckp'
 
+    def __del__(self):
+        self.close()
 
-def init_db(db_path: str, db_backup_path: str) -> RaidDict:
-    if os.path.isfile(db_backup_path):
-        raise IOError("Backup file exists already. Last time, Something went wrong ")
+    def __init__(self):
+        if os.path.isfile(self.db_backup_path):
+            raise IOError("Backup file exists already. Last time, Something went wrong ")
 
-    try:
-        # backup the db and open
-        copyfile(db_path, db_backup_path)
-        file = open(db_path)
-    except IOError:
-        # If db not exists, create the file and populate with an empty dict
-        file = open(db_path, 'w+')
-        file.write(" {}")
-        file.close()
+        try:
+            # backup the db and open
+            copyfile(self.db_path, self.db_backup_path)
+            file = open(self.db_path)
+        except IOError:
+            # If db not exists, create the file and populate with an empty dict
+            file = open(self.db_path, 'w+')
+            file.write(" {}")
+            file.close()
 
-        # backup the db and open
-        copyfile(db_path, db_backup_path)
-        file = open(db_path)
+            # backup the db and open
+            copyfile(self.db_path, self.db_backup_path)
+            file = open(self.db_path)
 
-    raids: RaidDict = jsonpickle.decode(file.read())
-    return raids
+        self.raid_db = jsonpickle.decode(file.read())
 
+    def store(self, raid_name: str, raid: Raid):
+        self.raid_db[raid_name] = raid
 
-def close_db(raids: RaidDict, db_path: str, db_backup_path: str):
-    file = open(db_path, 'w')
-    file.write(jsonpickle.encode(raids))
+    def find_raid(self, raid_name: str) -> Raid:
+        raid_name = raid_name.strip()
+        return self.raid_db.get(raid_name)
 
-    os.remove(db_backup_path)
+    def close(self):
+        file = open(self.db_path, 'w')
+        file.write(jsonpickle.encode(self.raid_db))
+        os.remove(self.db_backup_path)

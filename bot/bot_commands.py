@@ -1,7 +1,7 @@
 from discord import Member
 from discord.ext import commands
 from raid import Raid, UserId, MemberInfo
-from database import RAIDS, find_raid
+from database import RaidDB
 
 from helpers import sender_is_admin, get_member_ids, get_member_names, \
     update_shares, calculate_share, build_summary_table, build_member_table
@@ -30,12 +30,11 @@ async def split(ctx, raid_name, raiders: commands.Greedy[Member]):
     """
 
     raid_name = raid_name.strip()
-    if RAIDS.get(raid_name):
+    if RaidDB().find_raid(raid_name):
         await ctx.send(f"Raid **{raid_name}** already exists please use a different name!")
         return
 
     raid = Raid(admin=UserId(ctx.author.id), proposals={}, member_infos={}, is_open=True)
-    RAIDS[raid_name] = raid
 
     await ctx.send(f"A raid wit the name **{raid_name}** and **{len(raiders)}** members was created.")
 
@@ -49,13 +48,15 @@ async def split(ctx, raid_name, raiders: commands.Greedy[Member]):
             "If you make a mistake use the `!splitter allocate` again to modify your allocation."
         )
 
+    RaidDB().store(raid_name, raid)
+
 
 @splitter.command(help="Return all members of the raid.")
 async def members(ctx, raid_name):
     """
     This command returns all members. It is intended to be used before submitting the allocations.
     """
-    raid = find_raid(raid_name)
+    raid = RaidDB().find_raid(raid_name)
     member_names = get_member_names(raid)
 
     await ctx.send(f"The raid **{raid_name}** has **{len(member_names)}** members:\n"
@@ -68,7 +69,7 @@ async def allocate(ctx, raid_name, percentages: commands.Greedy[float]):
     """
     This command allocates shares to all members specified in the order of the members command.
     """
-    raid = find_raid(raid_name)
+    raid = RaidDB().find_raid(raid_name)
     members_ids = get_member_ids(raid)
 
     if len(members_ids) is not len(percentages):
@@ -83,11 +84,8 @@ async def allocate(ctx, raid_name, percentages: commands.Greedy[float]):
         await ctx.send(f"The percentages must greater than 0 and smaller than 100.")
         return
 
-    # fetch sender proposal
     sender: UserId = UserId(ctx.author.id)
-    sender_proposal = raid.proposals.get(sender)
-
-    # iterate over all beneficiaries in member info
+    # iterate over senders beneficiaries in member info
     for i, beneficiary in enumerate(members_ids):
         raid.proposals[sender][beneficiary] = percentages[i]
 
@@ -96,10 +94,11 @@ async def allocate(ctx, raid_name, percentages: commands.Greedy[float]):
     table = build_member_table(sender, raid)
     await ctx.send(f"Your current entries are \n ```{table}```")
 
+    RaidDB().store(raid_name, raid)
 
 @splitter.command(help="Get your averaged shares.")
 async def share(ctx, raid_name):
-    raid = find_raid(raid_name)
+    raid = RaidDB().find_raid(raid_name)
     sender = UserId(ctx.author.id)
 
     sender_info: MemberInfo = raid.member_infos.get(sender)
@@ -126,7 +125,7 @@ async def summary(ctx, raid_name):
     """
     sender: UserId = UserId(ctx.author.id)
     raid_name = raid_name.strip()
-    raid = RAIDS.get(raid_name)
+    raid = RaidDB().find_raid(raid_name)
 
     if await sender_is_admin(ctx, raid):
         table = build_summary_table(raid)
@@ -135,7 +134,7 @@ async def summary(ctx, raid_name):
 
 @splitter.command(help="Close the split (admin only)")
 async def close(ctx, raid_name):
-    raid = find_raid(raid_name)
+    raid = RaidDB().find_raid(raid_name)
 
     if await sender_is_admin(ctx, raid):
         raid.is_open = False
