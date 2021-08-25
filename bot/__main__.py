@@ -265,7 +265,7 @@ async def share(ctx, raid_name):
     else:
         await ctx.send(
             f"Your arithmetic mean share is **{sender_info.mean_share:.1f} %** and\n"
-            f"your geometric mean share is **{sender_info.geom_mean_share:.1f} %**")
+            f"your geometric mean share is **{sender_info.geom_mean_share:.1f} %**.")
 
 
 def calculate_share(_ctx, raid: Raid, user_id: UserId) -> bool:
@@ -291,7 +291,7 @@ async def update_shares(ctx, raid: Raid):
     for current_member, _ in raid.proposals.items():
         calculate_share(ctx, raid, current_member)
 
-
+#TODO should maybe be accessible only by PMs
 def build_summary_table(group: Raid):
     rows = []
     for outer_member, inner_dict in group.proposals.items():
