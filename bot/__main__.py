@@ -9,18 +9,13 @@ from shutil import copyfile
 from texttable import Texttable
 from typing import Dict, Tuple, Optional
 
-UserId = int
+UserId = str
 SplitMember = Tuple[int, str]
 
 
 @dataclass
-class Percentage:
-    val: float
-
-
-@dataclass
 class MemberInfo:
-    id: int
+    id: str
     name: str
     mean_share: Optional[float]
     geom_mean_share: Optional[float]
@@ -28,7 +23,7 @@ class MemberInfo:
 
 @dataclass
 class SplitGroup:
-    SplitProposal = Dict[UserId, Percentage]
+    SplitProposal = Dict[UserId, float]
 
     # It is a Dict of
     # id member to dictionary id member with proposed split
@@ -36,8 +31,8 @@ class SplitGroup:
     member_infos: Dict[UserId, MemberInfo]
 
     def add_member(self, raider: discord.User):
-        new_member = raider.id
-        self.member_infos[new_member] = MemberInfo(id=raider.id,
+        new_member = str(raider.id)
+        self.member_infos[new_member] = MemberInfo(id=str(raider.id),
                                                    name=raider.name,
                                                    mean_share=None,
                                                    geom_mean_share=None)
@@ -45,7 +40,7 @@ class SplitGroup:
         # Add new_member to all existing split proposals
         for _, proposal in self.proposals.items():
             if not proposal.get(new_member):
-                proposal[new_member] = Percentage(val=0)
+                proposal[new_member] = 0.0
 
         # Create a new split proposal for new_member and add all existing members
         if not self.proposals.get(new_member, None):
@@ -55,10 +50,10 @@ class SplitGroup:
             # add others
             existing_members = self.proposals.keys()
             for existing_member in existing_members:
-                new_members_proposal[existing_member] = Percentage(0)
+                new_members_proposal[existing_member] = 0.0
 
             # add self
-            new_members_proposal[new_member] = Percentage(0)
+            new_members_proposal[new_member] = 0.0
 
 
 RaidDict = Dict[str, SplitGroup]
@@ -109,10 +104,10 @@ def close_db(raids: RaidDict, db_path: str, db_backup_path: str):
     os.remove(db_backup_path)
 
 
-def verify_allocation(proposed_splits: Dict[SplitMember, Percentage]):
+def verify_allocation(proposed_splits: Dict[SplitMember, float]):
     allocation_used = 0
     for _, percentage in proposed_splits.items():
-        allocation_used += percentage.val
+        allocation_used += percentage
         if allocation_used > 100:
             return False
     return True
@@ -145,7 +140,7 @@ async def split(ctx, raid_name, raiders: commands.Greedy[discord.Member]):
 
     RAIDS[raid_name] = group
     for raider in raiders:
-        new_member: UserId = raider.id
+        new_member: UserId = str(raider.id)
         print(new_member)
         group.add_member(raider)
         await raider.send(
@@ -158,40 +153,34 @@ async def split(ctx, raid_name, raiders: commands.Greedy[discord.Member]):
 
 def find_raid_split_group(raid_name: str) -> SplitGroup:
     raid_name = raid_name.strip()
-    # todo error handling?
-
     return RAIDS.get(raid_name)
 
-
 def part_of_raid_party(raid_name: str, split_member: UserId) -> bool:
-    res = find_raid_split_group(raid_name).proposals.get(split_member, None)
-    print(res, res is not None)
+    res = find_raid_split_group(raid_name).proposals.get(str(split_member))
     return res is not None
 
 
 @splitter.command(help="Allocate a percentage of the spoils")
-async def allocate(ctx, raid_name, member: discord.User, split: int):
+async def allocate(ctx, raid_name, member: discord.User, split: float):
     """
     This command is meant to be used in a DM and where a raider will specify
     what they think a fair allocation is for a specific user
 
     """
-    percentage = Percentage(split)
+    percentage = split
 
-    raid_sg = find_raid_split_group(raid_name)
-    if raid_sg is None:
+    raid_name = raid_name.strip()
+    raid = find_raid_split_group(raid_name)
+    if raid is None:
         await ctx.send(f"Raid **{raid_name}** not found.")
         return
 
-    sender: UserId = ctx.author.id
-    beneficiary: UserId = member.id
-
-    raid_name = raid_name.strip()
-    raid: SplitGroup = RAIDS.get(raid_name)
+    sender: UserId = str(ctx.author.id)
+    beneficiary: UserId = str(member.id)
 
     # check if sender is part of the raid
     if not part_of_raid_party(raid_name, sender):
-        await ctx.send("You are not in the raid party of raid **{raid_name}**")
+        await ctx.send(f"You are not in the raid party of raid **{raid_name}**")
         return
 
     sender_proposals = raid.proposals.get(sender, None)
@@ -199,7 +188,7 @@ async def allocate(ctx, raid_name, member: discord.User, split: int):
 
     # check if beneficiary is part of the raid
     if not part_of_raid_party(raid_name, beneficiary):
-        await ctx.send("That beneficiary is not in the raid party")
+        await ctx.send(f"That beneficiary is not in the raid party of raid **{raid_name}**")
         return
 
     raid.proposals[sender][beneficiary] = percentage
@@ -212,24 +201,26 @@ async def allocate(ctx, raid_name, member: discord.User, split: int):
 
     table = build_member_table(sender, raid)
 
+    await update_shares(ctx, raid)
+
     await ctx.send(f"Your current entries are \n ```{table}```")
 
 
 @splitter.command(help="Edit an existing allocation proposal")
-async def edit(ctx, raid_name, member: discord.User, split: int):
+async def edit(ctx, raid_name, member: discord.User, split: float):
     """
     This command allows a raider to modify their proposed allocation
     """
 
-    percentage = Percentage(split)
+    percentage = split
 
     raid_sg = find_raid_split_group(raid_name)
     if raid_sg is None:
         await ctx.send(f"Raid **{raid_name}** not found.")
         return
 
-    sender: UserId = ctx.author.id
-    beneficiary: UserId = member.id
+    sender: UserId = str(ctx.author.id)
+    beneficiary: UserId = str(member.id)
 
     if not part_of_raid_party(raid_name, sender):
         await ctx.send("You are not a part of this raid")
@@ -270,7 +261,7 @@ def build_member_table(member: UserId, group: SplitGroup):
     splits = group.proposals.get(member)
     rows = []
     for member, percentage in splits.items():
-        rows.append([group.member_infos[member].name, percentage.val])
+        rows.append([group.member_infos[member].name, percentage])
 
     table = Texttable()
     table.add_rows(
@@ -291,7 +282,7 @@ def build_summary_table(group: SplitGroup):
         for inner_member, percentage in inner_dict.items():
             rows.append([group.member_infos[outer_member].name,
                          group.member_infos[inner_member].name,
-                         percentage.val])
+                         percentage])
 
     table = Texttable()
     table.add_rows(
