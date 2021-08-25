@@ -7,7 +7,7 @@ from discord.ext import commands
 from dataclasses import dataclass
 from shutil import copyfile
 from texttable import Texttable
-from typing import Dict, Tuple, Optional
+from typing import Dict, List, Tuple, Optional
 from statistics import mean, geometric_mean
 
 UserId = str
@@ -105,16 +105,6 @@ def close_db(raids: RaidDict, db_path: str, db_backup_path: str):
     os.remove(db_backup_path)
 
 
-# TODO refactor
-def verify_allocation(proposed_splits: Dict[SplitMember, float]):
-    allocation_used = 0
-    for _, percentage in proposed_splits.items():
-        allocation_used += percentage
-        if allocation_used > 100:
-            return False
-    return True
-
-
 @bot.group()
 async def splitter(ctx):
     if ctx.invoked_subcommand is None:
@@ -137,7 +127,7 @@ async def split(ctx, raid_name, raiders: commands.Greedy[discord.Member]):
     raid_name = raid_name.strip()
     group = Raid(proposals={}, member_infos={})
     if RAIDS.get(raid_name):
-        await ctx.send("Raid Already exists please use a different name!")
+        await ctx.send(f"Raid **{raid_name}** already exists please use a different name!")
         return
 
     RAIDS[raid_name] = group
@@ -148,8 +138,8 @@ async def split(ctx, raid_name, raiders: commands.Greedy[discord.Member]):
         await raider.send(
             f"Hi {group.member_infos[new_member].name}. Your input has been requested for the **{raid_name}** raid.\n"
             "Please use the `!splitter allocate <raid_name> <member_handle> <allocation>`. "
-            "Your allocations should be a number from 0 to 100 \n\n"
-            "If you make a mistake use the `!splitter edit` command to modify your allocation"
+            "Your allocations should be a number greater 0 and smaller 100 \n\n"
+            "If you make a mistake use the `!splitter allocate` again to modify your allocation."
         )
 
 
@@ -162,64 +152,67 @@ def part_of_raid(raid_name: str, split_member: UserId) -> bool:
     res = find_raid(raid_name).proposals.get(UserId(split_member))
     return res is not None
 
+
 @splitter.command(help="Return all members of the raid.")
 async def members(ctx, raid_name):
     """
     This command returns all members. It is intended to be used before submitting the allocations.
     """
     raid = find_raid(raid_name)
+    member_names = get_member_names(raid)
 
-    members: List[str] = []
+    await ctx.send(f"The raid **{raid_name}** has **{len(member_names)}** members:\n"
+                   f"*{', '.join(member_names)}*\n"
+                   f"Use the command `allocate` to specify their shares in the same order.")
+
+
+def get_member_names(raid):
+    member_names: List[str] = []
     for member, percentage in raid.member_infos.items():
-        members.append(raid.member_infos[member].name)
-
-    await ctx.send(f"The raid **{raid_name}** has **{len(members)}** members:\n"
-                   f"{', '.join(members)}\n"
-                   f"Use the command `allocate` to specify their shares.")
+        member_names.append(raid.member_infos[member].name)
+    return member_names
 
 
-@splitter.command(help="Allocate a percentage of the spoils")
-async def allocate(ctx, raid_name, member: discord.User, split: float):
+def get_member_ids(raid) -> List[str]:
+    member_ids: List[str] = []
+    for member, percentage in raid.member_infos.items():
+        member_ids.append(raid.member_infos[member].id)
+    return member_ids
+
+
+@splitter.command(help="Allocate a percentage of the spoils in the order of the command `members`")
+async def allocate(ctx, raid_name, percentages: commands.Greedy[float]):
     """
-    This command is meant to be used in a DM and where a raider will specify
-    what they think a fair allocation is for a specific user
+    This command allocates shares to all members specified in the order of the members command.
     """
-    percentage = split
 
-    raid_name = raid_name.strip()
     raid = find_raid(raid_name)
-    if raid is None:
-        await ctx.send(f"Raid **{raid_name}** not found.")
+    members_ids = get_member_ids(raid)
+
+    if len(members_ids) is not len(percentages):
+        await ctx.send(f"The number of allocations **{len(percentages)}** "
+                       f"does not match the number of **{len(members_ids)}**.")
+        await members(ctx, raid_name)
+        return
+    elif sum(percentages) != 100.0:
+        await ctx.send(f"The percentages must add up to **{100}**.")
+        return
+    elif any(x <= 0 or x >= 100 for x in percentages):
+        await ctx.send(f"The percentages must greater than 0 and smaller than 100.")
         return
 
+    # fetch sender proposal
     sender: UserId = UserId(ctx.author.id)
-    beneficiary: UserId = UserId(member.id)
+    sender_proposal = raid.proposals.get(sender)
 
-    # check if sender is part of the raid
-    if not part_of_raid(raid_name, sender):
-        await ctx.send(f"You are not in the raid party of raid **{raid_name}**")
-        return
-
-    sender_proposals = raid.proposals.get(sender, None)
-    sender_proposal_for_benificiary = sender_proposals.get(beneficiary, None)
-
-    # check if beneficiary is part of the raid
-    if not part_of_raid(raid_name, beneficiary):
-        await ctx.send(f"That beneficiary is not in the raid party of raid **{raid_name}**")
-        return
-
-    raid.proposals[sender][beneficiary] = percentage
-    valid = verify_allocation(sender_proposals)
-    if not valid:
-        # Rollback
-        raid.proposals[sender][beneficiary] = sender_proposal_for_benificiary
-        await ctx.send("This modification makes your allocations above 100")
-        return
-
-    table = build_member_table(sender, raid)
+    # iterate over all beneficiaries in member info
+    for i, beneficiary in enumerate(members_ids):
+        print(i, beneficiary, percentages)
+        raid.proposals[sender][beneficiary] = percentages[i]
 
     await update_shares(ctx, raid)
 
+    table = build_member_table(sender, raid)
     await ctx.send(f"Your current entries are \n ```{table}```")
 
 
@@ -235,11 +228,11 @@ async def summary(ctx, raid_name):
     await ctx.send(f"The current entries are \n ```{table}```")
 
 
-def build_member_table(member: UserId, group: Raid):
-    splits = group.proposals.get(member)
+def build_member_table(member: UserId, raid: Raid):
+    splits = raid.proposals.get(member)
     rows = []
     for member, percentage in splits.items():
-        rows.append([group.member_infos[member].name, percentage])
+        rows.append([raid.member_infos[member].name, percentage])
 
     table = Texttable()
     table.add_rows(
@@ -255,52 +248,43 @@ def build_member_table(member: UserId, group: Raid):
 
 
 @splitter.command(help="Get your averaged shares.")
-async def get_share(ctx, raid_name):
+async def share(ctx, raid_name):
     raid = find_raid(raid_name)
     sender = UserId(ctx.author.id)
 
-    await calculate_share(ctx, raid, sender)
-
     sender_info: MemberInfo = raid.member_infos.get(sender)
 
-    message = "Your arithmetic mean share is "
-    if sender_info.mean_share is not None:
-        message += f"**{sender_info.mean_share:.1f} %** and "
+    all_calculated = calculate_share(ctx, raid, sender)
+
+    if not all_calculated:
+        await ctx.send(
+            f"Your share cannot be calculated because some allocations are still missing.\n"
+            f"Consider reminding the other members to use the "
+            f"`!splitter allocate {raid_name} <allocations>` "
+            f"command.\n\n")
     else:
-        message += f"**not available** and "
-
-    message += "your geometric mean share is "
-    if sender_info.geom_mean_share is not None:
-        message += f"**{sender_info.geom_mean_share:.1f} %** and "
-    else:
-        message += f"**not available**."
-
-    await ctx.send(message)
+        await ctx.send(
+            f"Your arithmetic mean share is **{sender_info.mean_share:.1f} %** and\n"
+            f"your geometric mean share is **{sender_info.geom_mean_share:.1f} %**")
 
 
-async def calculate_share(ctx, raid: Raid, user_id: UserId):
+def calculate_share(_ctx, raid: Raid, user_id: UserId) -> bool:
     # iterate over all members
     proposed_shares: List[float] = []
 
     for _, proposal in raid.proposals.items():
         proposed_shares.append(proposal.get(user_id, None))
 
-    if any(x is None for x in proposed_shares):
-        await ctx.send(f"Some allocations are missing.")
-        return
+    allocations_incomplete = any(x is None for x in proposed_shares)
+    if allocations_incomplete:
+        #await ctx.send(f"Some allocations are missing.")
+        return False
 
     current_member_info: MemberInfo = raid.member_infos.get(user_id)
+    current_member_info.mean_share = mean(proposed_shares)
+    current_member_info.geom_mean_share = geometric_mean(proposed_shares)
 
-    if any(x is None for x in proposed_shares):
-        await ctx.send(f"Some allocations are missing so the arithmetic mean cannot be calculated.")
-    else:
-        current_member_info.mean_share = mean(proposed_shares)
-
-    if any(x == 0 for x in proposed_shares):
-        await ctx.send(f"Some allocations are 0 so that the geometric mean cannot be applied.")
-    else:
-        current_member_info.geom_mean_share = geometric_mean(proposed_shares)
-
+    return not allocations_incomplete
 
 async def update_shares(ctx, raid: Raid):
     # iterate over all members
