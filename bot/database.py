@@ -4,6 +4,13 @@ from shutil import copyfile
 
 from raid import *
 
+RAIDS = {}
+
+def find_raid(raid_name: str) -> Raid:
+    raid_name = raid_name.strip()
+    return RAIDS.get(raid_name)
+
+
 def init_db(db_path: str, db_backup_path: str) -> RaidDict:
     if os.path.isfile(db_backup_path):
         raise IOError("Backup file exists already. Last time, Something went wrong ")
