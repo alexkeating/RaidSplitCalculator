@@ -1,17 +1,72 @@
-import discord
 import logging
 import os
 import sys
-
-from dataclasses import dataclass
+import jsonpickle
+import discord
 from discord.ext import commands
+from dataclasses import dataclass
+from shutil import copyfile
 from texttable import Texttable
-from typing import Dict, List, Union
+from statistics import mean, geometric_mean
+from typing import Dict, Tuple, Optional
 
-logger = logging.getLogger(__name__)
 
-logging.basicConfig(level=logging.INFO)
-logger.info("Starting RaidSplitBot")
+UserId = int
+SplitMember = Tuple[int, str]
+
+
+@dataclass
+class Percentage:
+    val: float
+
+
+@dataclass
+class MemberInfo:
+    id: int
+    name: str
+    mean_share: Optional[float]
+    geom_mean_share: Optional[float]
+
+
+@dataclass
+class SplitGroup:
+    SplitProposal = Dict[UserId, Percentage]
+
+    # It is a Dict of
+    # id member to dictionary id member with proposed split
+    proposals: Dict[UserId, SplitProposal]
+    member_infos: Dict[UserId, MemberInfo]
+
+    def add_member(self, raider: discord.User):
+        new_member = raider.id
+        self.member_infos[new_member] = MemberInfo(id=raider.id,
+                                                   name=raider.name,
+                                                   mean_share=None,
+                                                   geom_mean_share=None)
+
+        # Add new_member to all existing split proposals
+        for _, proposal in self.proposals.items():
+            if not proposal.get(new_member):
+                proposal[new_member] = Percentage(val=0)
+
+        # Create a new split proposal for new_member and add all existing members
+        if not self.proposals.get(new_member, None):
+
+            new_members_proposal = self.proposals[new_member] = {}
+
+            # add others
+            existing_members = self.proposals.keys()
+            for existing_member in existing_members:
+                new_members_proposal[existing_member] = Percentage(0)
+
+            # add self
+            new_members_proposal[new_member] = Percentage(0)
+
+
+RaidDict = Dict[str, SplitGroup]
+
+
+
 
 TOKEN = os.getenv("API_TOKEN")
 if TOKEN is None:
@@ -20,46 +75,206 @@ if TOKEN is None:
 bot = commands.Bot(command_prefix="!")
 
 
-# TODO: Should be replaced with storage backend
-RAIDS = {}
+RAIDS: RaidDict = {}
+
+DB_PATH = os.getenv("DB_PATH")
+DB_BACKUP_PATH = DB_PATH + '.bckp'
 
 
-@dataclass
-class SplitMember:
-    info: discord.Member
-    split_percent: int
+def init_db(db_path: str, db_backup_path: str) -> RaidDict:
+    if os.path.isfile(db_backup_path):
+        raise IOError("Backup file exists already. Last time, Something went wrong ")
+
+    try:
+        copyfile(db_path, db_backup_path)
+        file = open(db_path)
+    except IOError:
+        # If not exists, create the file and populate with an empty dict
+        file = open(db_path,'w+')
+        file.write(" {}")
+        file.close()
+
+        copyfile(db_path, db_backup_path)
+        file = open(db_path)
 
 
-@dataclass
-class SplitGroup:
-    members: Dict[int, SplitMember]
-    # It is a Dict of
-    # id member to dictionary id member with proposed split
-    proposed_splits: Dict[int, Dict[int, SplitMember]]
+    raids: RaidDict = jsonpickle.decode(file.read())
 
-    def add_member(self, raider: discord.Member):
-        split_member = SplitMember(info=raider, split_percent=0)
+    print("Raids opened:\n", raids)
 
-        # Add member to members
-        self.members[raider.id] = split_member
+    return raids
 
-        # Add member to proposed splits
-        for member_id, splits in self.proposed_splits.items():
-            if not splits.get(raider.id):
-                splits[raider.id] = split_member
+def close_db(raids: RaidDict, db_path: str, db_backup_path: str):
+    print("Raids closed:\n", raids)
 
-        # Add proposed splits for new member
-        if not self.proposed_splits.get(raider.id, None):
-            self.proposed_splits[raider.id] = {
-                id_: member for id_, member in self.members.items()
-            }
+    file = open(db_path, 'w')
+    file.write(jsonpickle.encode(raids))
+
+    os.remove(db_backup_path)
 
 
-def build_member_table(member: int, group: SplitGroup):
-    splits = group.proposed_splits.get(member.id)
+def verify_allocation(proposed_splits: Dict[SplitMember, Percentage]):
+    allocation_used = 0
+    for _, percentage in proposed_splits.items():
+        allocation_used += percentage.val
+        if allocation_used > 100:
+            return False
+    return True
+
+
+@bot.group()
+async def splitter(ctx):
+    if ctx.invoked_subcommand is None:
+        await ctx.send(f"Subcommand {ctx.subcommand_passed} is not a valid subcommand!")
+
+
+@splitter.command()
+async def help(ctx):
+    commands = bot.all_commands
+    group = commands.get("splitter")
+    await ctx.send_help(group)
+
+
+@splitter.command(help="Send out a message to split a raid")
+async def split(ctx, raid_name, raiders: commands.Greedy[discord.Member]):
+    """
+    Command a PM will call when they want to run a split scenario
+    """
+
+    raid_name = raid_name.strip()
+    group = SplitGroup(proposals={}, member_infos={})
+    if RAIDS.get(raid_name):
+        await ctx.send("Raid Already exists please use a different name!")
+        return
+
+    RAIDS[raid_name] = group
+    for raider in raiders:
+        new_member: UserId = raider.id
+        print(new_member)
+        group.add_member(raider)
+        await raider.send(
+            f"Hi {group.member_infos[new_member].name}. Your input has been requested for the **{raid_name}** raid.\n"
+            "Please use the `!splitter allocate <raid_name> <member_handle> <allocation>`. "
+            "Your allocations should be a number from 0 to 100 \n\n"
+            "If you make a mistake use the `!splitter edit` command to modify your allocation"
+        )
+
+
+def find_raid_split_group(raid_name: str) -> SplitGroup:
+    raid_name = raid_name.strip()
+    # todo error handling?
+
+    return RAIDS.get(raid_name)
+
+
+def part_of_raid_party(raid_name: str, split_member: UserId) -> bool:
+    res = find_raid_split_group(raid_name).proposals.get(split_member, None)
+    print(res, res is not None)
+    return res is not None
+
+
+@splitter.command(help="Allocate a percentage of the spoils")
+async def allocate(ctx, raid_name, member: discord.User, split: int):
+    """
+    This command is meant to be used in a DM and where a raider will specify
+    what they think a fair allocation is for a specific user
+
+    """
+    percentage = Percentage(split)
+
+    raid_sg = find_raid_split_group(raid_name)
+    if raid_sg is None:
+        await ctx.send(f"Raid **{0}** not found.".format(raid_name))
+        return
+
+    sender: UserId = ctx.author.id
+    beneficiary: UserId = member.id
+
+    raid_name = raid_name.strip()
+    raid: SplitGroup = RAIDS.get(raid_name)
+
+    # check if sender is part of the raid
+    if not part_of_raid_party(raid_name, sender):
+        await ctx.send("You are not in the raid party")
+        return
+
+    sender_proposals = raid.proposals.get(sender, None)
+    sender_proposal_for_benificiary = sender_proposals.get(beneficiary, None)
+
+    # check if beneficiary is part of the raid
+    if not part_of_raid_party(raid_name, beneficiary):
+        await ctx.send("That beneficiary is not in the raid party")
+        return
+
+    raid.proposals[sender][beneficiary] = percentage
+    valid = verify_allocation(sender_proposals)
+    if not valid:
+        # Rollback
+        raid.proposals[sender][beneficiary] = sender_proposal_for_benificiary
+        await ctx.send("This modification makes your allocations above 100")
+        return
+
+    table = build_member_table(sender, raid)
+
+    await ctx.send(f"Your current entries are \n ```{table}```")
+
+
+@splitter.command(help="Edit an existing allocation proposal")
+async def edit(ctx, raid_name, member: discord.User, split: int):
+    """
+    This command allows a raider to modify their proposed allocation
+    """
+
+    percentage = Percentage(split)
+
+    raid_sg = find_raid_split_group(raid_name)
+    if raid_sg is None:
+        await ctx.send(f"Raid **{0}** not found.".format(raid_name))
+        return
+
+    sender: UserId = ctx.author.id
+    beneficiary: UserId = member.id
+
+    if not part_of_raid_party(raid_name, sender):
+        await ctx.send("You are not a part of this raid")
+        return
+
+    sender_percentage_proposal = raid_sg.proposals.get(sender, None)
+    old_percentage_proposal = sender_percentage_proposal.get(beneficiary, None)
+    if old_percentage_proposal is None:  # TODO is this a good test?
+        await ctx.send("The referred to member is not part of the raid party")
+        return
+
+    raid_sg.proposals[sender][beneficiary] = percentage
+
+    if not verify_allocation(sender_percentage_proposal):
+        # Rollback
+        raid_sg.proposals[sender][beneficiary] = old_percentage_proposal
+        await ctx.send("This modification makes your allocations above 100")
+        return
+
+    table = build_member_table(sender, raid_sg)
+
+    await ctx.send(f"Your current entries are \n ```{table}```")
+
+
+@splitter.command(help="Get a summary of the proposed allocations for a raid")
+async def summary(ctx, raid_name):
+    """
+    This command will show the allocations specified for all raiders
+    in a specific raid
+    """
+    raid_name = raid_name.strip()
+    raid = RAIDS.get(raid_name)
+    table = build_summary_table(raid)
+    await ctx.send(f"The current entries are \n ```{table}```")
+
+
+def build_member_table(member: UserId, group: SplitGroup):
+    splits = group.proposals.get(member)
     rows = []
-    for member, split in splits.items():
-        rows.append([split.info.name, split.split_percent])
+    for member, percentage in splits.items():
+        rows.append([group.member_infos[member].name, percentage.val])
 
     table = Texttable()
     table.add_rows(
@@ -76,10 +291,11 @@ def build_member_table(member: int, group: SplitGroup):
 
 def build_summary_table(group: SplitGroup):
     rows = []
-    for member, splits in group.proposed_splits.items():
-        for teammate, split in splits.items():
-            user = group.members.get(member)
-            rows.append([user.info.name, split.info.name, split.split_percent])
+    for outer_member, inner_dict in group.proposals.items():
+        for inner_member, percentage in inner_dict.items():
+            rows.append([group.member_infos[outer_member].name,
+                         group.member_infos[inner_member].name,
+                         percentage.val])
 
     table = Texttable()
     table.add_rows(
@@ -95,128 +311,12 @@ def build_summary_table(group: SplitGroup):
     return table.draw()
 
 
-def verify_allocation(proposed_splits):
-    allocation_used = 0
-    for member_id, split in proposed_splits.items():
-        allocation_used += split.split_percent
-        if allocation_used > 100:
-            return False
-    return True
+RAIDS: RaidDict = init_db(DB_PATH, DB_BACKUP_PATH)
 
-
-@bot.group()
-async def splitCalculator(ctx):
-    if ctx.invoked_subcommand is None:
-        await ctx.send(f"Subcommand {ctx.subcommand_passed} is not a valid subcommand!")
-
-
-@splitCalculator.command()
-async def help(ctx):
-    commands = bot.all_commands
-    group = commands.get("splitCalculator")
-    await ctx.send_help(group)
-
-
-@splitCalculator.command(help="Send out a message to split a raid")
-async def split(ctx, raid_name, raiders: commands.Greedy[discord.Member]):
-    """
-    Command a PM will call when they want to run a split scenario
-    """
-    raid_name = raid_name.strip()
-    group = SplitGroup(members={}, proposed_splits={})
-    if RAIDS.get(raid_name):
-        await ctx.send("Raid Already exists please use a different name!")
-        return
-
-    RAIDS[raid_name] = group
-    for raider in raiders:
-        group.add_member(raider)
-        await raider.send(
-            f"Hi your input has been requested for the {raid_name} raid\nPlease "
-            "use the `!splitCalculator allocate <raid_name> <member_handle> <allocation>`. Your "
-            "allocations should be a number from 0 to 100 \n\n"
-            "If you make a mistake use the `!splitCalculator edit` command to modify your allocation"
-        )
-
-
-@splitCalculator.command(help="Allocate a percentage of the spoils")
-async def allocate(ctx, raid_name, member: discord.User, allocation: int):
-    """
-    This command is meant to be used in a DM and where a raider will specify
-    what they think a fair allocation is for a specific user
-
-    """
-    raid_name = raid_name.strip()
-    raid = RAIDS.get(raid_name)
-    proposed_allocs = raid.proposed_splits.get(ctx.author.id)
-    if proposed_allocs is None:
-        await ctx.send("You are not in the raid party")
-        return
-    old_allocation = proposed_allocs.get(member.id, None)
-    if old_allocation is None:
-        await ctx.send("That user is not in the raid party")
-        return
-
-    raid.proposed_splits[ctx.author.id][member.id] = SplitMember(
-        info=member, split_percent=allocation
-    )
-    valid = verify_allocation(proposed_allocs)
-    if not valid:
-        # Rollback
-        raid.proposed_splits[ctx.author.id][member.id] = SplitMember(
-            info=member, split_percent=old_allocation
-        )
-        await ctx.send("This modification makes your allocations above 100")
-        return
-
-    table = build_member_table(member, raid)
-
-    await ctx.send(f"Your curent entries are \n ```{table}```")
-
-
-@splitCalculator.command(help="Get a summary of the proposed allocations for a raid")
-async def summary(ctx, raid_name):
-    """
-    This command will show the allocations specified for all raiders
-    in a specific raid
-    """
-    raid_name = raid_name.strip()
-    raid = RAIDS.get(raid_name)
-    table = build_summary_table(raid)
-    await ctx.send(f"The current entries are \n ```{table}```")
-
-
-@splitCalculator.command(help="Edit an existing allocation proposal")
-async def edit(ctx, raid_name, member: discord.User, split: int):
-    """
-    This command allows a raider to modify their proposed allocation
-    """
-    raid_name = raid_name.strip()
-    raid = RAIDS.get(raid_name)
-    author_proposals = raid.proposed_splits.get(ctx.author.id, None)
-    if not author_proposals:
-        await ctx.send("You are not a part of this raid")
-        return
-    old_proposal = author_proposals.get(member.id, None)
-    if old_proposal is None:
-        await ctx.send("The referred to member is not part of the raid party")
-        return
-
-    raid.proposed_splits[ctx.author.id][member.id] = SplitMember(
-        info=member, split_percent=split
-    )
-    valid = verify_allocation(author_proposals)
-    if not valid:
-        # Rollback
-        raid.proposed_splits[ctx.author.id][member.id] = SplitMember(
-            info=member, split_percent=old_proposal
-        )
-        await ctx.send("This modification makes your allocations above 100")
-        return
-
-    table = build_member_table(member, raid)
-
-    await ctx.send(f"Your curent entries are \n ```{table}```")
-
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
+logger.info("Starting RaidSplitBot")
 
 bot.run(TOKEN)
+
+close_db(RAIDS, DB_PATH, DB_BACKUP_PATH)

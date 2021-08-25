@@ -130,3 +130,7 @@ dmypy.json
 
 # JetBrains IDE
 .idea
+
+# database
+data.json
+data.json.bckp
