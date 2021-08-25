@@ -23,7 +23,7 @@ class MemberInfo:
 
 
 @dataclass
-class SplitGroup:
+class Raid:
     SplitProposal = Dict[UserId, Optional[float]]
 
     # It is a Dict of
@@ -57,7 +57,7 @@ class SplitGroup:
             new_members_proposal[new_member] = None
 
 
-RaidDict = Dict[str, SplitGroup]
+RaidDict = Dict[str, Raid]
 
 TOKEN = os.getenv("API_TOKEN")
 if TOKEN is None:
@@ -134,7 +134,7 @@ async def split(ctx, raid_name, raiders: commands.Greedy[discord.Member]):
     """
 
     raid_name = raid_name.strip()
-    group = SplitGroup(proposals={}, member_infos={})
+    group = Raid(proposals={}, member_infos={})
     if RAIDS.get(raid_name):
         await ctx.send("Raid Already exists please use a different name!")
         return
@@ -152,13 +152,13 @@ async def split(ctx, raid_name, raiders: commands.Greedy[discord.Member]):
         )
 
 
-def find_raid_split_group(raid_name: str) -> SplitGroup:
+def find_raid(raid_name: str) -> Raid:
     raid_name = raid_name.strip()
     return RAIDS.get(raid_name)
 
 
-def part_of_raid_party(raid_name: str, split_member: UserId) -> bool:
-    res = find_raid_split_group(raid_name).proposals.get(UserId(split_member))
+def part_of_raid(raid_name: str, split_member: UserId) -> bool:
+    res = find_raid(raid_name).proposals.get(UserId(split_member))
     return res is not None
 
 
@@ -172,7 +172,7 @@ async def allocate(ctx, raid_name, member: discord.User, split: float):
     percentage = split
 
     raid_name = raid_name.strip()
-    raid = find_raid_split_group(raid_name)
+    raid = find_raid(raid_name)
     if raid is None:
         await ctx.send(f"Raid **{raid_name}** not found.")
         return
@@ -181,7 +181,7 @@ async def allocate(ctx, raid_name, member: discord.User, split: float):
     beneficiary: UserId = UserId(member.id)
 
     # check if sender is part of the raid
-    if not part_of_raid_party(raid_name, sender):
+    if not part_of_raid(raid_name, sender):
         await ctx.send(f"You are not in the raid party of raid **{raid_name}**")
         return
 
@@ -189,7 +189,7 @@ async def allocate(ctx, raid_name, member: discord.User, split: float):
     sender_proposal_for_benificiary = sender_proposals.get(beneficiary, None)
 
     # check if beneficiary is part of the raid
-    if not part_of_raid_party(raid_name, beneficiary):
+    if not part_of_raid(raid_name, beneficiary):
         await ctx.send(f"That beneficiary is not in the raid party of raid **{raid_name}**")
         return
 
@@ -216,37 +216,37 @@ async def edit(ctx, raid_name, member: discord.User, split: float):
 
     percentage = split
 
-    raid_sg = find_raid_split_group(raid_name)
-    if raid_sg is None:
+    raid = find_raid(raid_name)
+    if raid is None:
         await ctx.send(f"Raid **{raid_name}** not found.")
         return
 
     sender: UserId = UserId(ctx.author.id)
     beneficiary: UserId = UserId(member.id)
 
-    if not part_of_raid_party(raid_name, sender):
+    if not part_of_raid(raid_name, sender):
         await ctx.send("You are not a part of this raid")
         return
 
-    sender_percentage_proposal = raid_sg.proposals.get(sender, None)
+    sender_percentage_proposal = raid.proposals.get(sender, None)
     old_percentage_proposal = sender_percentage_proposal.get(beneficiary, None)
     if old_percentage_proposal is None:  # TODO is this a good test?
         await ctx.send("The referred to member is not part of the raid party")
         return
 
-    raid_sg.proposals[sender][beneficiary] = percentage
+    raid.proposals[sender][beneficiary] = percentage
 
     if not verify_allocation(sender_percentage_proposal):
         # Rollback
-        raid_sg.proposals[sender][beneficiary] = old_percentage_proposal
+        raid.proposals[sender][beneficiary] = old_percentage_proposal
         await ctx.send("This modification makes your allocations above 100")
         return
 
-    table = build_member_table(sender, raid_sg)
+    table = build_member_table(sender, raid)
 
     await ctx.send(f"Your current entries are \n ```{table}```")
 
-    await update_shares(ctx, raid_sg)
+    await update_shares(ctx, raid)
 
 
 @splitter.command(help="Get a summary of the proposed allocations for a raid")
@@ -261,7 +261,7 @@ async def summary(ctx, raid_name):
     await ctx.send(f"The current entries are \n ```{table}```")
 
 
-def build_member_table(member: UserId, group: SplitGroup):
+def build_member_table(member: UserId, group: Raid):
     splits = group.proposals.get(member)
     rows = []
     for member, percentage in splits.items():
@@ -282,7 +282,7 @@ def build_member_table(member: UserId, group: SplitGroup):
 
 @splitter.command(help="Get your averaged shares.")
 async def get_share(ctx, raid_name):
-    raid = find_raid_split_group(raid_name)
+    raid = find_raid(raid_name)
     sender = UserId(ctx.author.id)
 
     await calculate_share(ctx, raid, sender)
@@ -304,7 +304,7 @@ async def get_share(ctx, raid_name):
     await ctx.send(message)
 
 
-async def calculate_share(ctx, raid: SplitGroup, user_id: UserId):
+async def calculate_share(ctx, raid: Raid, user_id: UserId):
     # iterate over all members
     proposed_shares: List[float] = []
 
@@ -328,13 +328,13 @@ async def calculate_share(ctx, raid: SplitGroup, user_id: UserId):
         current_member_info.geom_mean_share = geometric_mean(proposed_shares)
 
 
-async def update_shares(ctx, raid: SplitGroup):
+async def update_shares(ctx, raid: Raid):
     # iterate over all members
     for current_member, _ in raid.proposals.items():
         calculate_share(ctx, raid, current_member)
 
 
-def build_summary_table(group: SplitGroup):
+def build_summary_table(group: Raid):
     rows = []
     for outer_member, inner_dict in group.proposals.items():
         for inner_member, percentage in inner_dict.items():
