@@ -3,9 +3,6 @@ from discord.ext import commands
 from raid import Raid, UserId, MemberInfo
 from database import RaidDB
 
-from helpers import sender_is_admin, get_member_ids, get_member_names, \
-    update_shares, calculate_share, build_summary_table, build_member_table
-
 bot = commands.Bot(command_prefix="!")
 
 
@@ -57,7 +54,7 @@ async def members(ctx, raid_name):
     This command returns all members. It is intended to be used before submitting the allocations.
     """
     raid = RaidDB().find_raid(raid_name)
-    member_names = get_member_names(raid)
+    member_names = raid.get_member_names()
 
     await ctx.send(f"The raid **{raid_name}** has **{len(member_names)}** members:\n"
                    f"*{', '.join(member_names)}*\n"
@@ -70,7 +67,7 @@ async def allocate(ctx, raid_name, percentages: commands.Greedy[float]):
     This command allocates shares to all members specified in the order of the members command.
     """
     raid = RaidDB().find_raid(raid_name)
-    members_ids = get_member_ids(raid)
+    members_ids = raid.get_member_ids()
 
     if len(members_ids) is not len(percentages):
         await ctx.send(f"The number of allocations **{len(percentages)}** "
@@ -89,12 +86,13 @@ async def allocate(ctx, raid_name, percentages: commands.Greedy[float]):
     for i, beneficiary in enumerate(members_ids):
         raid.proposals[sender][beneficiary] = percentages[i]
 
-    await update_shares(ctx, raid)
+    raid.update_shares()
 
-    table = build_member_table(sender, raid)
+    table = raid.build_member_table(sender)
     await ctx.send(f"Your current entries are \n ```{table}```")
 
     RaidDB().store(raid_name, raid)
+
 
 @splitter.command(help="Get your averaged shares.")
 async def share(ctx, raid_name):
@@ -103,7 +101,7 @@ async def share(ctx, raid_name):
 
     sender_info: MemberInfo = raid.member_infos.get(sender)
 
-    all_calculated = calculate_share(ctx, raid, sender)
+    all_calculated = raid.calculate_share(sender)
 
     if not all_calculated:
         await ctx.send(
@@ -123,20 +121,25 @@ async def summary(ctx, raid_name):
     This command will show the allocations specified for all raiders
     in a specific raid
     """
-    sender: UserId = UserId(ctx.author.id)
+    sender = UserId(ctx.author.id)
     raid_name = raid_name.strip()
     raid = RaidDB().find_raid(raid_name)
 
-    if await sender_is_admin(ctx, raid):
-        table = build_summary_table(raid)
+    if raid.is_admin(sender):
+        table = raid.build_summary_table()
         await ctx.send(f"The current entries are \n ```{table}```")
+    else:
+        await ctx.send(f"You are **not the admin**.")
 
 
 @splitter.command(help="Close the split (admin only)")
 async def close(ctx, raid_name):
     raid = RaidDB().find_raid(raid_name)
 
-    if await sender_is_admin(ctx, raid):
+    sender = UserId(ctx.author.id)
+    if raid.is_admin(sender):
         raid.is_open = False
         # TODO send to all member
         await ctx.send(f"The split for raid **{raid_name}** has been closed.")
+    else:
+        await ctx.send(f"You are **not the admin**.")
