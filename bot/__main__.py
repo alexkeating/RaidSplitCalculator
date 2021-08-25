@@ -105,6 +105,7 @@ def close_db(raids: RaidDict, db_path: str, db_backup_path: str):
     os.remove(db_backup_path)
 
 
+# TODO refactor
 def verify_allocation(proposed_splits: Dict[SplitMember, float]):
     allocation_used = 0
     for _, percentage in proposed_splits.items():
@@ -161,13 +162,27 @@ def part_of_raid(raid_name: str, split_member: UserId) -> bool:
     res = find_raid(raid_name).proposals.get(UserId(split_member))
     return res is not None
 
+@splitter.command(help="Return all members of the raid.")
+async def members(ctx, raid_name):
+    """
+    This command returns all members. It is intended to be used before submitting the allocations.
+    """
+    raid = find_raid(raid_name)
+
+    members: List[str] = []
+    for member, percentage in raid.member_infos.items():
+        members.append(raid.member_infos[member].name)
+
+    await ctx.send(f"The raid **{raid_name}** has **{len(members)}** members:\n"
+                   f"{', '.join(members)}\n"
+                   f"Use the command `allocate` to specify their shares.")
+
 
 @splitter.command(help="Allocate a percentage of the spoils")
 async def allocate(ctx, raid_name, member: discord.User, split: float):
     """
     This command is meant to be used in a DM and where a raider will specify
     what they think a fair allocation is for a specific user
-
     """
     percentage = split
 
@@ -206,47 +221,6 @@ async def allocate(ctx, raid_name, member: discord.User, split: float):
     await update_shares(ctx, raid)
 
     await ctx.send(f"Your current entries are \n ```{table}```")
-
-
-@splitter.command(help="Edit an existing allocation proposal")
-async def edit(ctx, raid_name, member: discord.User, split: float):
-    """
-    This command allows a raider to modify their proposed allocation
-    """
-
-    percentage = split
-
-    raid = find_raid(raid_name)
-    if raid is None:
-        await ctx.send(f"Raid **{raid_name}** not found.")
-        return
-
-    sender: UserId = UserId(ctx.author.id)
-    beneficiary: UserId = UserId(member.id)
-
-    if not part_of_raid(raid_name, sender):
-        await ctx.send("You are not a part of this raid")
-        return
-
-    sender_percentage_proposal = raid.proposals.get(sender, None)
-    old_percentage_proposal = sender_percentage_proposal.get(beneficiary, None)
-    if old_percentage_proposal is None:  # TODO is this a good test?
-        await ctx.send("The referred to member is not part of the raid party")
-        return
-
-    raid.proposals[sender][beneficiary] = percentage
-
-    if not verify_allocation(sender_percentage_proposal):
-        # Rollback
-        raid.proposals[sender][beneficiary] = old_percentage_proposal
-        await ctx.send("This modification makes your allocations above 100")
-        return
-
-    table = build_member_table(sender, raid)
-
-    await ctx.send(f"Your current entries are \n ```{table}```")
-
-    await update_shares(ctx, raid)
 
 
 @splitter.command(help="Get a summary of the proposed allocations for a raid")
