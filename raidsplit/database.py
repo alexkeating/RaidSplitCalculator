@@ -4,7 +4,7 @@ from shutil import copyfile
 from raid import RaidDict, Raid
 
 
-class RaidDB:
+class Database:
     raid_db: RaidDict = {}
     db_path = os.getenv("DB_PATH")
     db_backup_path = db_path + '.bckp'

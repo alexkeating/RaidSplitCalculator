@@ -2,7 +2,7 @@ import discord
 from discord import Member
 from discord.ext import commands
 from raid import Raid, UserId, MemberInfo
-from database import RaidDB
+from database import Database
 
 bot = commands.Bot(command_prefix="!")
 
@@ -29,7 +29,7 @@ async def raid(ctx, raid_name, raiders: commands.Greedy[Member]):
     """
 
     raid_name = raid_name.strip()
-    if RaidDB().find_raid(raid_name) is not None:
+    if Database().find_raid(raid_name) is not None:
         await ctx.send(f"Raid **{raid_name}** already exists please use a different name!")
         return
 
@@ -47,7 +47,7 @@ async def raid(ctx, raid_name, raiders: commands.Greedy[Member]):
             "If you make a mistake use the `!split allocate` again to modify your allocation."
         )
 
-    RaidDB().store(raid_name, raid)
+    Database().store(raid_name, raid)
 
 
 @split.command(help="Show all raid members.")
@@ -55,7 +55,7 @@ async def members(ctx, raid_name):
     """
     This command returns all members. It is intended to be used before submitting the allocations.
     """
-    raid = RaidDB().find_raid(raid_name)
+    raid = Database().find_raid(raid_name)
     member_names = raid.get_member_names()
 
     await ctx.send(f"The raid **{raid_name}** has **{len(member_names)}** members:\n"
@@ -69,7 +69,7 @@ async def allocate(ctx, raid_name, percentages: commands.Greedy[float]):
     """
     This command allocates shares to all members specified in the order of the members command.
     """
-    raid = RaidDB().find_raid(raid_name)
+    raid = Database().find_raid(raid_name)
 
     if not raid.is_open:
         return await ctx.send(f"The raid **{raid_name}** has already been closed.")
@@ -94,14 +94,14 @@ async def allocate(ctx, raid_name, percentages: commands.Greedy[float]):
         raid.proposals[sender][beneficiary] = percentages[i]
 
     raid.update_shares()
-    RaidDB().store(raid_name, raid)
+    Database().store(raid_name, raid)
 
     await show(ctx, raid_name)
 
 
 @split.command(help="Show your averaged shares.")
 async def share(ctx, raid_name):
-    raid = RaidDB().find_raid(raid_name)
+    raid = Database().find_raid(raid_name)
     sender = UserId(ctx.author.id)
 
     sender_info: MemberInfo = raid.member_infos.get(sender)
@@ -127,7 +127,7 @@ def share_message_text(raid_name: str, info: MemberInfo, is_final: bool) -> str:
 
 @split.command(help="Show your allocations.")
 async def show(ctx, raid_name):
-    raid = RaidDB().find_raid(raid_name)
+    raid = Database().find_raid(raid_name)
     sender = UserId(ctx.author.id)
 
     table = raid.build_member_table(sender)
@@ -142,7 +142,7 @@ async def summary(ctx, raid_name):
     """
     sender = UserId(ctx.author.id)
     raid_name = raid_name.strip()
-    raid = RaidDB().find_raid(raid_name)
+    raid = Database().find_raid(raid_name)
 
     if raid.is_admin(sender):
         table = raid.build_summary_table()
@@ -153,7 +153,7 @@ async def summary(ctx, raid_name):
 
 @split.command(help="Close the raid (admin only)")
 async def close(ctx, raid_name):
-    raid = RaidDB().find_raid(raid_name)
+    raid = Database().find_raid(raid_name)
 
     sender = UserId(ctx.author.id)
     if not raid.is_open:
@@ -164,7 +164,7 @@ async def close(ctx, raid_name):
     elif raid.is_admin(sender):
         raid.is_open = False
 
-        RaidDB().store(raid_name, raid)
+        Database().store(raid_name, raid)
 
 
         # TODO send to all member

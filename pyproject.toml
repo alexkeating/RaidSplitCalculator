@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "raid_split_calculator"
+name = "raidsplit"
 version = "0.1.0"
 description = ""
 authors = ["Your Name <you@example.com>"]
