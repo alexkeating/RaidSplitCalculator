@@ -1,8 +1,7 @@
 import os
 import jsonpickle
 from shutil import copyfile
-
-from raid import *
+from raid import RaidDict, Raid
 
 
 class RaidDB:

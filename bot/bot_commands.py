@@ -1,3 +1,4 @@
+import discord
 from discord import Member
 from discord.ext import commands
 from raid import Raid, UserId, MemberInfo
@@ -28,7 +29,7 @@ async def raid(ctx, raid_name, raiders: commands.Greedy[Member]):
     """
 
     raid_name = raid_name.strip()
-    if RaidDB().find_raid(raid_name):
+    if RaidDB().find_raid(raid_name) is not None:
         await ctx.send(f"Raid **{raid_name}** already exists please use a different name!")
         return
 
@@ -69,6 +70,10 @@ async def allocate(ctx, raid_name, percentages: commands.Greedy[float]):
     This command allocates shares to all members specified in the order of the members command.
     """
     raid = RaidDB().find_raid(raid_name)
+
+    if not raid.is_open:
+        return await ctx.send(f"The raid **{raid_name}** has already been closed.")
+
     members_ids = raid.get_member_ids()
 
     if len(members_ids) is not len(percentages):
@@ -110,10 +115,14 @@ async def share(ctx, raid_name):
             f"`!split allocate {raid_name} <allocations>` "
             f"command.\n\n")
     else:
-        await ctx.send(
-            f"Your arithmetic mean share is **{sender_info.mean_share:.1f} %** and\n"
-            f"your geometric mean share is **{sender_info.geom_mean_share:.1f} %**.\n"
-            f"This is **{'not final' if raid.is_open else 'final'}**.")
+        await ctx.send(share_message_text(raid_name, sender_info, not raid.is_open))
+
+
+def share_message_text(raid_name: str, info: MemberInfo, is_final: bool) -> str:
+    return f"Your shares for raid** {raid_name} %**:\n" \
+           f"Arithmetic mean: **{info.mean_share:.1f} %**\n" \
+           f"Geometric  mean: **{info.geom_mean_share:.1f} %**\n" \
+           f"*This is **{'final' if is_final else 'not final'}**.*"
 
 
 @split.command(help="Show your allocations.")
@@ -147,9 +156,22 @@ async def close(ctx, raid_name):
     raid = RaidDB().find_raid(raid_name)
 
     sender = UserId(ctx.author.id)
-    if raid.is_admin(sender):
+    if not raid.is_open:
+        await ctx.send(f"The raid **{raid_name}** has already been closed.")
+    elif False:
+        # TODO check if allocations are missing
+        pass
+    elif raid.is_admin(sender):
         raid.is_open = False
+
+        RaidDB().store(raid_name, raid)
+
+
         # TODO send to all member
         await ctx.send(f"The raid for raid **{raid_name}** has been closed.")
+
+        for id, info in raid.member_infos.items():
+            user: discord.User = await bot.fetch_user(int(id))
+            await user.send(share_message_text(raid_name, info, True))
     else:
         await ctx.send(f"You are **not the admin**.")

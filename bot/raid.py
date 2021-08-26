@@ -110,7 +110,8 @@ class Raid:
 
         return self.build_table(["Proposer", "Teammate", "Proposed Split"], rows)
 
-    def build_table(self, header, rows):
+    @staticmethod
+    def build_table(header, rows):
         table = Texttable()
         table.add_rows([header, *rows])
         return table.draw()
