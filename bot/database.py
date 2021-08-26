@@ -22,7 +22,7 @@ class RaidDB:
             copyfile(self.db_path, self.db_backup_path)
             file = open(self.db_path)
         except IOError:
-            # If db not exists, create the file and populate with an empty dict
+            # If db does not exist, create the file and populate with an empty dict
             file = open(self.db_path, 'w+')
             file.write(" {}")
             file.close()

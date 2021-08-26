@@ -19,7 +19,7 @@ class MemberInfo:
 @dataclass
 class Raid:
     """
-    A class that holds the split proposals of a raid.
+    A class that holds the raid proposals of a raid.
     """
     admin: UserId
     proposals: Dict[UserId, SplitProposal]
@@ -33,12 +33,12 @@ class Raid:
                                                    mean_share=None,
                                                    geom_mean_share=None)
 
-        # Add new_member to all existing split proposals
+        # Add new_member to all existing raid proposals
         for _, proposal in self.proposals.items():
             if not proposal.get(new_member):
                 proposal[new_member] = None
 
-        # Create a new split proposal for new_member and add all existing members
+        # Create a new raid proposal for new_member and add all existing members
         if not self.proposals.get(new_member, None):
 
             new_members_proposal = self.proposals[new_member] = {}
