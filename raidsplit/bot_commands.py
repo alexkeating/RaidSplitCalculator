@@ -33,7 +33,11 @@ async def raid(ctx, raid_name, raiders: commands.Greedy[Member]):
         await ctx.send(f"Raid **{raid_name}** already exists please use a different name!")
         return
 
-    raid = Raid(admin=UserId(ctx.author.id), proposals={}, member_infos={}, is_open=True)
+    raid = Raid(name=raid_name,
+                admin=UserId(ctx.author.id),
+                proposals={},
+                member_infos={},
+                is_open=True)
 
     await ctx.send(f"A raid wit the name **{raid_name}** and **{len(raiders)}** members was created.")
 
@@ -104,25 +108,17 @@ async def share(ctx, raid_name):
     raid = Database().find_raid(raid_name)
     sender = UserId(ctx.author.id)
 
-    sender_info: MemberInfo = raid.member_infos.get(sender)
-
     all_calculated = raid.calculate_share(sender)
 
     if not all_calculated:
         await ctx.send(
             f"Your share cannot be calculated because some allocations are still missing.\n"
             f"Consider reminding the other members to use the "
-            f"`!split allocate {raid_name} <allocations>` "
-            f"command.\n\n")
+            f"`!split allocate {raid_name} <allocations>` command.")
     else:
-        await ctx.send(share_message_text(raid_name, sender_info, not raid.is_open))
+        await ctx.send(raid.share_message_text(sender))
 
 
-def share_message_text(raid_name: str, info: MemberInfo, is_final: bool) -> str:
-    return f"Your shares for raid** {raid_name} %**:\n" \
-           f"Arithmetic mean: **{info.mean_share:.1f} %**\n" \
-           f"Geometric  mean: **{info.geom_mean_share:.1f} %**\n" \
-           f"*This is **{'final' if is_final else 'not final'}**.*"
 
 
 @split.command(help="Show your allocations.")
@@ -158,20 +154,21 @@ async def close(ctx, raid_name):
     sender = UserId(ctx.author.id)
     if not raid.is_open:
         await ctx.send(f"The raid **{raid_name}** has already been closed.")
-    elif False:
-        # TODO check if allocations are missing
-        pass
+    elif any(member_info.mean_share is None or
+             member_info.geom_mean_share is None
+             for _, member_info in raid.member_infos.items()):
+        await ctx.send(f"The raid **{raid_name}** cannot be closed because some allocations are still missing.\n"
+                       f"Consider reminding the other members to use "
+                       f"`!split allocate {raid_name} <allocations>`.")
     elif raid.is_admin(sender):
         raid.is_open = False
 
         Database().store(raid_name, raid)
-
-
-        # TODO send to all member
         await ctx.send(f"The raid for raid **{raid_name}** has been closed.")
 
         for id, info in raid.member_infos.items():
             user: discord.User = await bot.fetch_user(int(id))
-            await user.send(share_message_text(raid_name, info, True))
+            await user.send(raid.share_message_text(id))
+
     else:
         await ctx.send(f"You are **not the admin**.")

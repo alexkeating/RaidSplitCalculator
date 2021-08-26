@@ -21,6 +21,7 @@ class Raid:
     """
     A class that holds the raid proposals of a raid.
     """
+    name: str
     admin: UserId
     proposals: Dict[UserId, SplitProposal]
     member_infos: Dict[UserId, MemberInfo]
@@ -109,6 +110,12 @@ class Raid:
                 is_first = False
 
         return self.build_table(["Proposer", "Teammate", "Proposed Split"], rows)
+
+    def share_message_text(self, member_id: UserId) -> str:
+        return f"Your shares for raid** {self.name} %**:\n" \
+               f"Arithmetic mean: **{self.member_infos[member_id].mean_share:.1f} %**\n" \
+               f"Geometric  mean: **{self.member_infos[member_id].geom_mean_share:.1f} %**\n" \
+               f"*This is **{'final' if not self.is_open else 'not final'}**.*"
 
     @staticmethod
     def build_table(header, rows):
