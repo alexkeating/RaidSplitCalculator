@@ -4,6 +4,12 @@ from database import Database
 
 
 class LocalFile(Database):
+    """
+    A simple database solution using a JSON file. The file is stored locally at DB_PATH.
+    If no database is present, a new one is created.
+    Everytime the file is accessed, a local backup file is created.
+    """
+
     db_path = os.getenv("DB_PATH")
     db_backup_path = db_path + '.bckp'
 

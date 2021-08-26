@@ -2,7 +2,14 @@ from jsonpickle import encode, decode
 from abc import ABC, abstractmethod
 from raid import RaidDict, Raid
 
+
 class Database(ABC):
+    """
+    This class is an interface to allow multiple storage solutions in the future.
+    To realize the interace, the abstract methods `__init__(self)` and `close(self)`
+    have to be implemented.
+    """
+
     raid_db: RaidDict = {}
 
     @abstractmethod

@@ -19,7 +19,7 @@ class MemberInfo:
 @dataclass
 class Raid:
     """
-    A class that holds the raid proposals of a raid.
+    A class containing the information of a raid to be split.
     """
     name: str
     admin: UserId

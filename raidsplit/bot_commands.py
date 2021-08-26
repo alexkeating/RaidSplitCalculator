@@ -119,8 +119,6 @@ async def share(ctx, raid_name):
         await ctx.send(raid.share_message_text(sender))
 
 
-
-
 @split.command(help="Show your allocations.")
 async def show(ctx, raid_name):
     raid = LocalFile().find_raid(raid_name)
