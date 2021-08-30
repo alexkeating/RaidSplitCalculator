@@ -1,14 +1,15 @@
 [tool.poetry]
-name = "raid_split_calculator"
+name = "raidsplit"
 version = "0.1.0"
 description = ""
 authors = ["Your Name <you@example.com>"]
 license = "MIT"
 
 [tool.poetry.dependencies]
-python = "^3.8"
+python = "^3.9"
 "discord.py" = "^1.7.1"
 texttable = "^1.6.3"
+jsonpickle = "^2.0.0"
 
 [tool.poetry.dev-dependencies]
 

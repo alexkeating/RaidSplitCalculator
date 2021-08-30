@@ -127,3 +127,10 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# JetBrains IDE
+.idea
+
+# database
+data.json
+data.json.bckp
