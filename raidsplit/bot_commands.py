@@ -55,8 +55,9 @@ async def raid(ctx, raid_name, raiders: commands.Greedy[Member]):
         await raider.send(
             f"Hi {raid.member_infos[new_member].name}. Your input has been requested for the **{raid_name}** raid.\n"
             f"Please use the `!split allocate {raid_name} <allocations>`. "
-            "Your allocations should be a number greater 0 and smaller 100, and in the same order as the `!split members` command \n\n"
-            "If you make a mistake use the `!split allocate` again to modify your allocation."
+            "Your allocations must be percentages between 0 and 100." 
+            f"Together, they must sum up to exactly 100 and be specified in the same order as displayed in `!split members {raid_name}`. \n\n"
+            f"If you make a mistake use the `!split allocate {raid_name} <allocations>` command again to modify your allocation."
         )
 
     LocalFile().store(raid)
