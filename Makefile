@@ -1,11 +1,12 @@
-PROJECT_NAME=bot
+PROJECT_NAME=split
+PWD=$(shell pwd)
 REGISTRY_NAME=$(shell grep REGISTRY_NAME .env | cut -d "=" -f2)
-IMAGE_PATH = /guild/bot
+IMAGE_PATH = /guild/split
 TAG = latest
 
 # Make sure poetry virtual env is active
 local:
-	poetry run python ./bot
+	poetry run python ./raidsplit
 
 azure_login:
 	az acr login --name $(REGISTRY_NAME)
@@ -15,8 +16,8 @@ build:
 
 run:
 	docker run -e API_TOKEN=$(API_TOKEN) \
-			   -e CLIENT_ID=$(CLIENT_ID) \
-			   -e GUILD_ID=$(GUILD_ID) \
+			-e DB_PATH=$(DB_PATH) \
+			-v $(PWD)/$(DB_PATH):/service/$(DB_PATH) \
 			   $(PROJECT_NAME):$(TAG) $(cmd)
 
 # Go into the container

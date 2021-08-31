@@ -21,6 +21,7 @@ class Raid:
     """
     A class containing the information of a raid to be split.
     """
+
     name: str
     admin: UserId
     proposals: Dict[UserId, SplitProposal]
@@ -29,10 +30,12 @@ class Raid:
 
     def add_member(self, raider: discord.User):
         new_member = UserId(raider.id)
-        self.member_infos[new_member] = MemberInfo(id=UserId(raider.id),
-                                                   name=raider.name,
-                                                   mean_share=None,
-                                                   geom_mean_share=None)
+        self.member_infos[new_member] = MemberInfo(
+            id=UserId(raider.id),
+            name=raider.name,
+            mean_share=None,
+            geom_mean_share=None,
+        )
 
         # Add new_member to all existing raid proposals
         for _, proposal in self.proposals.items():
@@ -95,7 +98,9 @@ class Raid:
     def build_member_table(self, proposer: UserId):
         rows = []
         for proposer, percentage in self.proposals.get(proposer).items():
-            rows.append([self.member_infos[proposer].name, percentage])
+            member = self.member_infos[proposer]
+            # Calculation has happened
+            rows.append([member.name, percentage])
 
         return self.build_table(["Teammate", "Proposed Split"], rows)
 
@@ -104,18 +109,36 @@ class Raid:
         for proposer, inner_dict in self.proposals.items():
             is_first = True
             for teammate, percentage in inner_dict.items():
-                rows.append([self.member_infos[proposer].name if is_first else "",
-                             self.member_infos[teammate].name,
-                             percentage])
+                teammate_member = self.member_infos[teammate]
+                extra_columns = []
+                extra_data_points = []
+                if teammate_member.mean_share:
+                    extra_columns.extend(["Arith Mean", "Geo Mean"])
+                    extra_data_points.extend(
+                        [teammate_member.mean_share, teammate_member.geom_mean_share]
+                    )
+
+                rows.append(
+                    [
+                        self.member_infos[proposer].name if is_first else "",
+                        self.member_infos[teammate].name,
+                        percentage,
+                        *extra_data_points,
+                    ]
+                )
                 is_first = False
 
-        return self.build_table(["Proposer", "Teammate", "Proposed Split"], rows)
+        return self.build_table(
+            ["Proposer", "Teammate", "Proposed Split", *extra_columns], rows
+        )
 
     def share_message_text(self, member_id: UserId) -> str:
-        return f"Your shares for raid** {self.name} %**:\n" \
-               f"Arithmetic mean: **{self.member_infos[member_id].mean_share:.1f} %**\n" \
-               f"Geometric  mean: **{self.member_infos[member_id].geom_mean_share:.1f} %**\n" \
-               f"*This is **{'final' if not self.is_open else 'not final'}**.*"
+        return (
+            f"Your shares for raid** {self.name} %**:\n"
+            f"Arithmetic mean: **{self.member_infos[member_id].mean_share:.1f} %**\n"
+            f"Geometric  mean: **{self.member_infos[member_id].geom_mean_share:.1f} %**\n"
+            f"*This is **{'final' if not self.is_open else 'not final'}**.*"
+        )
 
     @staticmethod
     def build_table(header, rows):
