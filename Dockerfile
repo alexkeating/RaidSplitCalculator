@@ -6,4 +6,4 @@ RUN pip install poetry
 COPY . /service
 
 RUN poetry install
-CMD poetry run python ./guild_bot
+CMD poetry run python ./raidsplit
